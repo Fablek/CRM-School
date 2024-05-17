@@ -30,7 +30,7 @@ int main()
         exit(1);
     }
 
-    con->setSchema("testsql");
+    con->setSchema("schoolcrm");
 
     cout << "Połączono";
 
