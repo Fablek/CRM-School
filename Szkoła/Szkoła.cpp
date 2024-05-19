@@ -179,8 +179,63 @@ void createClass(sql::Connection* con) {
 }
 
 void assignStudentToClass(sql::Connection* con) {
-    // Implementacja przypisywania ucznia do klasy
+    string studentImie;
+    string studentNazwisko;
+    string nazwaKlasy;
+
+    // Poproś użytkownika o podanie imienia, nazwiska ucznia i nazwy klasy
+    cout << "Podaj imię ucznia: ";
+    cin >> studentImie;
+    cout << "Podaj nazwisko ucznia: ";
+    cin >> studentNazwisko;
+    cout << "Podaj nazwę klasy: ";
+    cin >> nazwaKlasy;
+
+    try {
+        // Znajdź identyfikator klasy na podstawie nazwy
+        sql::PreparedStatement* pstmt;
+        pstmt = con->prepareStatement("SELECT id FROM Klasy WHERE nazwa=?");
+        pstmt->setString(1, nazwaKlasy);
+        sql::ResultSet* res = pstmt->executeQuery();
+
+        int idKlasy;
+        if (res->next()) {
+            idKlasy = res->getInt("id");
+
+            // Znajdź identyfikator ucznia na podstawie imienia i nazwiska
+            pstmt = con->prepareStatement("SELECT id FROM Osoby WHERE imie=? AND nazwisko=?");
+            pstmt->setString(1, studentImie);
+            pstmt->setString(2, studentNazwisko);
+            res = pstmt->executeQuery();
+
+            int idUcznia;
+            if (res->next()) {
+                idUcznia = res->getInt("id");
+
+                // Wstawienie danych do tabeli Klasy_Uczniowie
+                pstmt = con->prepareStatement("INSERT INTO Klasy_Uczniowie (id_klasy, id_ucznia) VALUES (?, ?)");
+                pstmt->setInt(1, idKlasy);
+                pstmt->setInt(2, idUcznia);
+                pstmt->executeUpdate();
+
+                cout << "Uczeń został przypisany do klasy pomyślnie." << endl;
+            }
+            else {
+                cout << "Uczeń o imieniu " << studentImie << " i nazwisku " << studentNazwisko << " nie został znaleziony." << endl;
+            }
+        }
+        else {
+            cout << "Klasa o nazwie " << nazwaKlasy << " nie została znaleziona." << endl;
+        }
+
+        delete pstmt;
+        delete res;
+    }
+    catch (sql::SQLException& e) {
+        cout << "Błąd SQL: " << e.what() << endl;
+    }
 }
+
 
 void removeStudentFromClass(sql::Connection* con) {
     // Implementacja usuwania ucznia z klasy
@@ -198,48 +253,63 @@ int main() {
         con->setSchema(db);
 
         int userType;
-        cout << "Wybierz typ konta:" << endl;
-        cout << "1. Nauczyciel" << endl;
-        cout << "2. Administrator" << endl;
-        cout << "Twój wybór: ";
-        cin >> userType;
-
-        switch (userType) {
-        case 1:
-            loginAsTeacher(con);
-            addGrade(con);
-            addBehavioralNote(con);
-            break;
-        case 2:
-            loginAsAdmin(con);
-
-            int adminOption;
-            cout << "Wybierz jedną z dostępnych opcji:" << endl;
-            cout << "1. Dodaj ucznia" << endl;
-            cout << "2. Stwórz klasę" << endl;
+        do {
+            cout << "Wybierz typ użytkownika:" << endl;
+            cout << "1. Nauczyciel" << endl;
+            cout << "2. Administrator" << endl;
+            cout << "3. Wyjdź" << endl;
             cout << "Twój wybór: ";
-            cin >> adminOption;
+            cin >> userType;
 
-            switch (adminOption) {
+            switch (userType) {
             case 1:
-                addStudent(con);
+                loginAsTeacher(con);
+                addGrade(con);
+                addBehavioralNote(con);
+                break;
             case 2:
-                createClass(con);
-            }
+                loginAsAdmin(con);
 
-            assignStudentToClass(con);
-            removeStudentFromClass(con);
-            break;
-        default:
-            cout << "Nieprawidłowy wybór. Wyjście z programu..." << endl;
-        }
+                int adminOption;
+                do {
+                    cout << "Wybierz jedną z dostępnych opcji:" << endl;
+                    cout << "1. Dodaj ucznia" << endl;
+                    cout << "2. Stwórz klasę" << endl;
+                    cout << "3. Dodaj ucznia do klasy" << endl;
+                    cout << "4. Wyloguj się" << endl;
+                    cout << "Twój wybór: ";
+                    cin >> adminOption;
+
+                    switch (adminOption) {
+                    case 1:
+                        addStudent(con);
+                        break;
+                    case 2:
+                        createClass(con);
+                        break;
+                    case 3:
+                        assignStudentToClass(con);
+                        break;
+                    case 4:
+                        break; // Wylogowanie zagnieżdżone wewnętrznej pętli do...while
+                    default:
+                        cout << "Nieprawidłowy wybór." << endl;
+                    }
+                } while (adminOption != 4);
+                break;
+            case 3:
+                // Zakończ program
+                return 0;
+            default:
+                cout << "Nieprawidłowy wybór." << endl;
+            }
+        } while (true); // Pętla główna programu działa, dopóki użytkownik nie wybierze opcji "Wyloguj się"
 
         delete con;
     }
     catch (sql::SQLException& e) {
-        cout << "Nie można połączyć się z serwerem. Komunikat o błędzie: " << e.what() << endl;
+        cout << "Nie można połączyć się z serwerem. Komunikat błędu: " << e.what() << endl;
     }
 
     return 0;
 }
-
