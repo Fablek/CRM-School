@@ -212,13 +212,24 @@ void assignStudentToClass(sql::Connection* con) {
             if (res->next()) {
                 idUcznia = res->getInt("id");
 
-                // Wstawienie danych do tabeli Klasy_Uczniowie
-                pstmt = con->prepareStatement("INSERT INTO Klasy_Uczniowie (id_klasy, id_ucznia) VALUES (?, ?)");
+                // Sprawdź, czy uczeń już należy do wybranej klasy
+                pstmt = con->prepareStatement("SELECT * FROM Klasy_Uczniowie WHERE id_klasy=? AND id_ucznia=?");
                 pstmt->setInt(1, idKlasy);
                 pstmt->setInt(2, idUcznia);
-                pstmt->executeUpdate();
+                res = pstmt->executeQuery();
 
-                cout << "Uczeń został przypisany do klasy pomyślnie." << endl;
+                if (res->next()) {
+                    cout << "Uczeń już należy do tej klasy." << endl;
+                }
+                else {
+                    // Wstawienie danych do tabeli Klasy_Uczniowie
+                    pstmt = con->prepareStatement("INSERT INTO Klasy_Uczniowie (id_klasy, id_ucznia) VALUES (?, ?)");
+                    pstmt->setInt(1, idKlasy);
+                    pstmt->setInt(2, idUcznia);
+                    pstmt->executeUpdate();
+
+                    cout << "Uczeń został przypisany do klasy pomyślnie." << endl;
+                }
             }
             else {
                 cout << "Uczeń o imieniu " << studentImie << " i nazwisku " << studentNazwisko << " nie został znaleziony." << endl;
@@ -235,7 +246,6 @@ void assignStudentToClass(sql::Connection* con) {
         cout << "Błąd SQL: " << e.what() << endl;
     }
 }
-
 
 void removeStudentFromClass(sql::Connection* con) {
     // Implementacja usuwania ucznia z klasy
