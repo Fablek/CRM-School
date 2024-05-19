@@ -134,7 +134,7 @@ void addStudent(sql::Connection* con) {
             studentId = generatedKeys->getInt(1);
         }
         else {
-            throw sql::SQLException("No generated keys returned");
+            throw sql::SQLException("Nie zwrócono wygenerowanych kluczy");
         }
         delete pstmt;
         delete generatedKeys;
@@ -151,12 +151,31 @@ void addStudent(sql::Connection* con) {
         delete pstmt;
     }
     catch (sql::SQLException& e) {
-        cout << "SQL error: " << e.what() << endl;
+        cout << "Błąd SQL: " << e.what() << endl;
     }
 }
 
 void createClass(sql::Connection* con) {
     // Implementacja tworzenia klasy
+    string className;
+
+    cout << "Wpisz nazwę klasy: ";
+    cin >> className;
+
+    try {
+        // Dodawanie nowej klasy do tabeli "klasy"
+        sql::PreparedStatement* pstmt;
+        pstmt = con->prepareStatement("INSERT INTO klasy (nazwa) VALUES (?);");
+        pstmt->setString(1, className);
+        pstmt->executeUpdate();
+
+        delete pstmt;
+
+        cout << "Klasa została dodana pomyślnie." << endl;
+    }
+    catch (sql::SQLException& e) {
+        cout << "Błąd SQL: " << e.what() << endl;
+    }
 }
 
 void assignStudentToClass(sql::Connection* con) {
@@ -197,26 +216,28 @@ int main() {
             int adminOption;
             cout << "Wybierz jedną z dostępnych opcji:" << endl;
             cout << "1. Dodaj ucznia" << endl;
+            cout << "2. Stwórz klasę" << endl;
             cout << "Twój wybór: ";
             cin >> adminOption;
 
             switch (adminOption) {
             case 1:
                 addStudent(con);
+            case 2:
+                createClass(con);
             }
 
-            createClass(con);
             assignStudentToClass(con);
             removeStudentFromClass(con);
             break;
         default:
-            cout << "Invalid choice. Exiting program..." << endl;
+            cout << "Nieprawidłowy wybór. Wyjście z programu..." << endl;
         }
 
         delete con;
     }
     catch (sql::SQLException& e) {
-        cout << "Could not connect to server. Error message: " << e.what() << endl;
+        cout << "Nie można połączyć się z serwerem. Komunikat o błędzie: " << e.what() << endl;
     }
 
     return 0;
