@@ -97,10 +97,19 @@ CREATE TABLE IF NOT EXISTS Klasy_Przedmioty (
     FOREIGN KEY (id_przedmiotu) REFERENCES Przedmioty(id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS Uprawnienia (
+CREATE TABLE IF NOT EXISTS Nauczyciele_Przedmioty (
     id_nauczyciela INT,
     id_przedmiotu INT,
     PRIMARY KEY (id_nauczyciela, id_przedmiotu),
     FOREIGN KEY (id_nauczyciela) REFERENCES Nauczyciele(id) ON DELETE CASCADE,
     FOREIGN KEY (id_przedmiotu) REFERENCES Przedmioty(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS Nauczyciele_Klasy (
+    id_nauczyciela INT,
+    id_klasy INT,
+    PRIMARY KEY (id_nauczyciela, id_klasy),
+    FOREIGN KEY (id_nauczyciela) REFERENCES Nauczyciele(id) ON DELETE CASCADE,
+    FOREIGN KEY (id_klasy) REFERENCES Klasy(id) ON DELETE CASCADE
+);
+
