@@ -45,8 +45,11 @@ public:
 };
 
 class Teacher : public User {
+private:
+    int teacherId;  // Przechowujemy id nauczyciela po zalogowaniu
+
 public:
-    Teacher(sql::Connection* connection) : User(connection) {}
+    Teacher(sql::Connection* connection) : User(connection), teacherId(-1) {}
 
     bool login() override {
         string teacherUsername, teacherPassword;
@@ -57,12 +60,13 @@ public:
 
         try {
             sql::PreparedStatement* pstmt;
-            pstmt = con->prepareStatement("SELECT * FROM Nauczyciele WHERE username=? AND password=?");
+            pstmt = con->prepareStatement("SELECT id FROM Nauczyciele WHERE username=? AND password=?");
             pstmt->setString(1, teacherUsername);
             pstmt->setString(2, teacherPassword);
             sql::ResultSet* res = pstmt->executeQuery();
 
             if (res->next()) {
+                teacherId = res->getInt("id");
                 cout << "Pomyślnie zalogowano jako nauczyciel." << endl;
                 delete pstmt;
                 delete res;
@@ -82,106 +86,113 @@ public:
     }
 
     void addGrade() {
-        string studentUsername, subjectName, gradeDate, gradeDescription;
-        double grade;
-
-        cout << "Wpisz nazwę użytkownika ucznia: ";
-        cin >> studentUsername;
-        cout << "Wpisz nazwę przedmiotu: ";
-        cin >> subjectName;
-        cout << "Wpisz ocenę: ";
-        cin >> grade;
-        cout << "Wpisz datę oceny (RRRR-MM-DD): ";
-        cin >> gradeDate;
-        cout << "Wpisz opis oceny: ";
-        cin.ignore(); // Clear input buffer
-        getline(cin, gradeDescription);
-
         try {
+            // Pobierz wszystkie dostępne przedmioty z bazy danych, do których jest przypisany nauczyciel
             sql::PreparedStatement* pstmt;
-            sql::ResultSet* res;
+            pstmt = con->prepareStatement("SELECT p.id, p.nazwa FROM Przedmioty p JOIN Nauczyciele_Przedmioty np ON p.id = np.id_przedmiotu WHERE np.id_nauczyciela = ?");
+            pstmt->setInt(1, teacherId);
+            sql::ResultSet* res = pstmt->executeQuery();
 
-            // Get student ID
-            pstmt = con->prepareStatement("SELECT id FROM Uczniowie WHERE username=?");
-            pstmt->setString(1, studentUsername);
-            res = pstmt->executeQuery();
-
-            int studentId;
-            if (res->next()) {
-                studentId = res->getInt("id");
+            // Tworzymy mapę przechowującą identyfikatory przedmiotów i ich nazwy
+            map<int, string> subjects;
+            while (res->next()) {
+                int subjectId = res->getInt("id");
+                string subjectName = res->getString("nazwa");
+                subjects[subjectId] = subjectName;
             }
-            else {
-                cout << "Uczeń nie został znaleziony." << endl;
+
+            // Jeśli nauczyciel nie jest przypisany do żadnego przedmiotu, wyświetlamy komunikat i przerywamy działanie funkcji
+            if (subjects.empty()) {
+                cout << "Nie jesteś przypisany do żadnego przedmiotu." << endl;
                 delete pstmt;
                 delete res;
                 return;
             }
 
-            delete res;
+            // Wyświetlamy menu wyboru przedmiotu dla użytkownika
+            cout << "Wybierz przedmiot:" << endl;
+            for (const auto& pair : subjects) {
+                cout << pair.first << ". " << pair.second << endl;
+            }
 
-            // Get subject ID
-            pstmt = con->prepareStatement("SELECT id FROM Przedmioty WHERE nazwa=?");
-            pstmt->setString(1, subjectName);
-            res = pstmt->executeQuery();
+            // Pobieramy wybór użytkownika
+            int choice;
+            cout << "Twój wybór: ";
+            cin >> choice;
 
-            int subjectId;
-            if (res->next()) {
-                subjectId = res->getInt("id");
+            // Sprawdzamy, czy wybór jest prawidłowy
+            if (subjects.find(choice) != subjects.end()) {
+                string subjectName = subjects[choice];
+                // Pozostała część funkcji addGrade()
+
+                string studentUsername, gradeDate, gradeDescription;
+                double grade;
+
+                cout << "Wpisz nazwę użytkownika ucznia: ";
+                cin >> studentUsername;
+                cout << "Wpisz ocenę: ";
+                cin >> grade;
+                cout << "Wpisz datę oceny (RRRR-MM-DD): ";
+                cin >> gradeDate;
+                cout << "Wpisz opis oceny: ";
+                cin.ignore(); // Ignorujemy znak nowej linii z poprzedniego wczytania
+                getline(cin, gradeDescription);
+
+                // Pobierz identyfikator ucznia z bazy danych na podstawie jego nazwy użytkownika
+                int studentId;
+                pstmt = con->prepareStatement("SELECT id FROM Uczniowie WHERE username = ?");
+                pstmt->setString(1, studentUsername);
+                res = pstmt->executeQuery();
+                if (res->next()) {
+                    studentId = res->getInt("id");
+                }
+                else {
+                    cout << "Uczeń o podanym użytkowniku nie istnieje." << endl;
+                    delete pstmt;
+                    delete res;
+                    return;
+                }
+
+                // Dodaj ocenę do bazy danych
+                pstmt = con->prepareStatement("INSERT INTO Oceny (id_ucznia, id_przedmiotu, ocena, data_oceny, opis) VALUES (?, ?, ?, ?, ?)");
+                pstmt->setInt(1, studentId);
+                pstmt->setInt(2, choice);
+                pstmt->setDouble(3, grade);
+                pstmt->setString(4, gradeDate);
+                pstmt->setString(5, gradeDescription);
+                pstmt->executeUpdate();
+
+                cout << "Ocena została dodana pomyślnie." << endl;
             }
             else {
-                cout << "Przedmiot nie został znaleziony." << endl;
-                delete pstmt;
-                delete res;
-                return;
+                cout << "Nieprawidłowy wybór przedmiotu." << endl;
             }
 
+            delete pstmt;
             delete res;
-            delete pstmt;
-
-            // Insert grade
-            pstmt = con->prepareStatement("INSERT INTO Oceny (id_ucznia, id_przedmiotu, ocena, data_oceny, opis) VALUES (?, ?, ?, ?, ?)");
-            pstmt->setInt(1, studentId);
-            pstmt->setInt(2, subjectId);
-            pstmt->setDouble(3, grade);
-            pstmt->setString(4, gradeDate);
-            pstmt->setString(5, gradeDescription);
-            pstmt->executeUpdate();
-
-            cout << "Ocena została dodana pomyślnie." << endl;
-
-            delete pstmt;
         }
         catch (sql::SQLException& e) {
             cout << "Błąd SQL: " << e.what() << endl;
         }
     }
 
-    void addBehavioralNote() {
-        // Implementacja dodawania uwagi z zachowania
-        cout << "Dodawanie uwagi z zachowania (implementacja w toku)." << endl;
-    }
-
     void teacherMenu() {
-        int teacherOption;
+        int choice;
         do {
-            cout << "Wybierz jedną z dostępnych opcji:" << endl;
-            cout << "1. Dodaj ocenę" << endl;
-            cout << "2. Dodaj uwagę z zachowania" << endl;
-            cout << "3. Wyloguj się" << endl;
+            cout << "\n--- Menu Nauczyciela ---\n";
+            cout << "1. Dodaj ocenę\n";
+            cout << "2. Wyloguj\n";
             cout << "Twój wybór: ";
-            cin >> teacherOption;
+            cin >> choice;
 
-            switch (teacherOption) {
+            switch (choice) {
             case 1:
                 addGrade();
                 break;
             case 2:
-                addBehavioralNote();
-                break;
-            case 3:
                 return;
             default:
-                cout << "Nieprawidłowy wybór." << endl;
+                cout << "Nieprawidłowy wybór. Spróbuj ponownie." << endl;
             }
         } while (true);
     }
@@ -200,7 +211,7 @@ public:
 
         try {
             sql::PreparedStatement* pstmt;
-            pstmt = con->prepareStatement("SELECT * FROM Admin WHERE username=? AND password=?");
+            pstmt = con->prepareStatement("SELECT id FROM Admin WHERE username=? AND password=?");
             pstmt->setString(1, adminUsername);
             pstmt->setString(2, adminPassword);
             sql::ResultSet* res = pstmt->executeQuery();
@@ -224,56 +235,84 @@ public:
         }
     }
 
-    void adminMenu() {
-        int adminOption;
-        do {
-            cout << "Wybierz jedną z dostępnych opcji:" << endl;
-            cout << "1. Dodaj ucznia" << endl;
-            cout << "2. Stwórz klasę" << endl;
-            cout << "3. Dodaj ucznia do klasy" << endl;
-            cout << "4. Wyloguj się" << endl;
-            cout << "Twój wybór: ";
-            cin >> adminOption;
+    void addTeacher() {
+        string teacherName, teacherSurname, teacherDob, teacherPesel, teacherAddress, teacherPhone, teacherEmail, teacherUsername, teacherPassword;
+        cout << "Wpisz imię nauczyciela: ";
+        cin >> teacherName;
+        cout << "Wpisz nazwisko nauczyciela: ";
+        cin >> teacherSurname;
+        cout << "Wpisz datę urodzenia nauczyciela (RRRR-MM-DD): ";
+        cin >> teacherDob;
+        cout << "Wpisz PESEL nauczyciela: ";
+        cin >> teacherPesel;
+        cout << "Wpisz adres nauczyciela: ";
+        cin.ignore();
+        getline(cin, teacherAddress);
+        cout << "Wpisz telefon nauczyciela: ";
+        cin >> teacherPhone;
+        cout << "Wpisz email nauczyciela: ";
+        cin >> teacherEmail;
+        cout << "Wpisz nazwę użytkownika nauczyciela: ";
+        cin >> teacherUsername;
+        cout << "Wpisz hasło nauczyciela: ";
+        cin >> teacherPassword;
 
-            switch (adminOption) {
-            case 1:
-                addStudent();
-                break;
-            case 2:
-                createClass();
-                break;
-            case 3:
-                assignStudentToClass();
-                break;
-            case 4:
-                return;
-            default:
-                cout << "Nieprawidłowy wybór." << endl;
+        try {
+            sql::PreparedStatement* pstmt;
+            pstmt = con->prepareStatement("INSERT INTO Osoby (imie, nazwisko, data_urodzenia, pesel, adres, telefon, email) VALUES (?, ?, ?, ?, ?, ?, ?)");
+            pstmt->setString(1, teacherName);
+            pstmt->setString(2, teacherSurname);
+            pstmt->setString(3, teacherDob);
+            pstmt->setString(4, teacherPesel);
+            pstmt->setString(5, teacherAddress);
+            pstmt->setString(6, teacherPhone);
+            pstmt->setString(7, teacherEmail);
+            pstmt->executeUpdate();
+
+            pstmt = con->prepareStatement("SELECT id FROM Osoby WHERE pesel=?");
+            pstmt->setString(1, teacherPesel);
+            sql::ResultSet* res = pstmt->executeQuery();
+
+            int teacherId;
+            if (res->next()) {
+                teacherId = res->getInt("id");
+                pstmt = con->prepareStatement("INSERT INTO Nauczyciele (id, username, password) VALUES (?, ?, ?)");
+                pstmt->setInt(1, teacherId);
+                pstmt->setString(2, teacherUsername);
+                pstmt->setString(3, teacherPassword);
+                pstmt->executeUpdate();
+
+                cout << "Nauczyciel został dodany pomyślnie." << endl;
             }
-        } while (true);
+
+            delete pstmt;
+            delete res;
+        }
+        catch (sql::SQLException& e) {
+            cout << "Błąd SQL: " << e.what() << endl;
+        }
     }
 
     void addStudent() {
-        string studentName, studentSurname, studentBirthdate, studentPesel, studentAddress, studentPhone, studentEmail, studentUsername, studentPassword;
-
+        string studentName, studentSurname, studentDob, studentPesel, studentAddress, studentPhone, studentEmail, studentUsername, studentPassword;
         cout << "Wpisz imię ucznia: ";
         cin >> studentName;
         cout << "Wpisz nazwisko ucznia: ";
         cin >> studentSurname;
         cout << "Wpisz datę urodzenia ucznia (RRRR-MM-DD): ";
-        cin >> studentBirthdate;
-        cout << "Wpisz PESEL studenta: ";
+        cin >> studentDob;
+        cout << "Wpisz PESEL ucznia: ";
         cin >> studentPesel;
-        cout << "Wpisz adres studenta: ";
-        cin.ignore(); // Clearing the input buffer
+        cout << "Wpisz adres ucznia: ";
+        cin.ignore();
         getline(cin, studentAddress);
-        cout << "Podaj numer telefonu ucznia: ";
+        cout << "Wpisz telefon ucznia: ";
         cin >> studentPhone;
-        cout << "Podaj adres e-mail ucznia: ";
+        cout << "Wpisz email ucznia: ";
         cin >> studentEmail;
         cout << "Wpisz nazwę użytkownika ucznia: ";
         cin >> studentUsername;
-        cout << "Podaj hasło ucznia: ";
+        cout << "Wpisz hasło ucznia: ";
         cin >> studentPassword;
 
         try {
@@ -281,7 +320,7 @@ public:
             pstmt = con->prepareStatement("INSERT INTO Osoby (imie, nazwisko, data_urodzenia, pesel, adres, telefon, email) VALUES (?, ?, ?, ?, ?, ?, ?)");
             pstmt->setString(1, studentName);
             pstmt->setString(2, studentSurname);
-            pstmt->setString(3, studentBirthdate);
+            pstmt->setString(3, studentDob);
             pstmt->setString(4, studentPesel);
             pstmt->setString(5, studentAddress);
             pstmt->setString(6, studentPhone);
@@ -350,63 +389,95 @@ public:
             int classId;
             if (res->next()) {
                 classId = res->getInt("id");
-
-                pstmt = con->prepareStatement("SELECT id FROM Osoby WHERE imie=? AND nazwisko=?");
-                pstmt->setString(1, studentName);
-                pstmt->setString(2, studentSurname);
-                res = pstmt->executeQuery();
-
-                int studentId;
-                if (res->next()) {
-                    studentId = res->getInt("id");
-
-                    pstmt = con->prepareStatement("SELECT * FROM Klasy_Uczniowie WHERE id_klasy=? AND id_ucznia=?");
-                    pstmt->setInt(1, classId);
-                    pstmt->setInt(2, studentId);
-                    res = pstmt->executeQuery();
-
-                    if (res->next()) {
-                        cout << "Uczeń już należy do tej klasy." << endl;
-                    }
-                    else {
-                        pstmt = con->prepareStatement("INSERT INTO Klasy_Uczniowie (id_klasy, id_ucznia) VALUES (?, ?)");
-                        pstmt->setInt(1, classId);
-                        pstmt->setInt(2, studentId);
-                        pstmt->executeUpdate();
-
-                        cout << "Uczeń został przypisany do klasy pomyślnie." << endl;
-                    }
-                }
-                else {
-                    cout << "Uczeń o imieniu " << studentName << " i nazwisku " << studentSurname << " nie został znaleziony." << endl;
-                }
             }
             else {
-                cout << "Klasa o nazwie " << className << " nie została znaleziona." << endl;
+                cout << "Klasa nie została znaleziona." << endl;
+                delete pstmt;
+                delete res;
+                return;
             }
 
-            delete pstmt;
             delete res;
+
+            pstmt = con->prepareStatement("SELECT id FROM Osoby WHERE imie=? AND nazwisko=?");
+            pstmt->setString(1, studentName);
+            pstmt->setString(2, studentSurname);
+            res = pstmt->executeQuery();
+
+            int studentId;
+            if (res->next()) {
+                studentId = res->getInt("id");
+            }
+            else {
+                cout << "Uczeń nie został znaleziony." << endl;
+                delete pstmt;
+                delete res;
+                return;
+            }
+
+            delete res;
+
+            pstmt = con->prepareStatement("INSERT INTO Klasy_Uczniowie (id_klasy, id_ucznia) VALUES (?, ?)");
+            pstmt->setInt(1, classId);
+            pstmt->setInt(2, studentId);
+            pstmt->executeUpdate();
+
+            cout << "Uczeń został przypisany do klasy." << endl;
+
+            delete pstmt;
         }
         catch (sql::SQLException& e) {
             cout << "Błąd SQL: " << e.what() << endl;
         }
+    }
+
+    void adminMenu() {
+        int choice;
+        do {
+            cout << "\n--- Menu Administratora ---\n";
+            cout << "1. Dodaj nauczyciela\n";
+            cout << "2. Dodaj ucznia\n";
+            cout << "3. Utwórz klasę\n";
+            cout << "4. Przypisz ucznia do klasy\n";
+            cout << "5. Wyloguj\n";
+            cout << "Twój wybór: ";
+            cin >> choice;
+
+            switch (choice) {
+            case 1:
+                addTeacher();
+                break;
+            case 2:
+                addStudent();
+                break;
+            case 3:
+                createClass();
+                break;
+            case 4:
+                assignStudentToClass();
+                break;
+            case 5:
+                return;
+            default:
+                cout << "Nieprawidłowy wybór. Spróbuj ponownie." << endl;
+            }
+        } while (true);
     }
 };
 
 int main() {
     setlocale(LC_CTYPE, "polish");
 
-    try {
-        DatabaseManager dbManager;
-        sql::Connection* con = dbManager.getConnection();
+    DatabaseManager dbManager;
+    sql::Connection* con = dbManager.getConnection();
 
+    if (con) {
         int userType;
         do {
-            cout << "Wybierz typ użytkownika:" << endl;
-            cout << "1. Nauczyciel" << endl;
-            cout << "2. Administrator" << endl;
-            cout << "3. Wyjdź" << endl;
+            cout << "\n--- System Zarządzania Szkołą ---\n";
+            cout << "1. Zaloguj jako nauczyciel\n";
+            cout << "2. Zaloguj jako administrator\n";
+            cout << "3. Wyjdź\n";
             cout << "Twój wybór: ";
             cin >> userType;
 
@@ -426,15 +497,15 @@ int main() {
                 break;
             }
             case 3:
-                return 0;
+                cout << "Zamykanie programu..." << endl;
+                break;
             default:
-                cout << "Nieprawidłowy wybór." << endl;
+                cout << "Nieprawidłowy wybór. Spróbuj ponownie." << endl;
             }
-        } while (true);
-
+        } while (userType != 3);
     }
-    catch (sql::SQLException& e) {
-        cout << "Nie można połączyć się z serwerem. Komunikat błędu: " << e.what() << endl;
+    else {
+        cout << "Nie udało się połączyć z bazą danych." << endl;
     }
 
     return 0;
