@@ -176,12 +176,162 @@ public:
         }
     }
 
+    void addComment() {
+        try {
+            string studentUsername, commentContent;
+
+            cout << "Wpisz nazwę użytkownika ucznia: ";
+            cin >> studentUsername;
+            cout << "Wpisz treść uwagi: ";
+            cin.ignore();
+            getline(cin, commentContent);
+
+            // Pobierz identyfikator ucznia z bazy danych na podstawie jego nazwy użytkownika
+            int studentId;
+            sql::PreparedStatement* pstmt = con->prepareStatement("SELECT id FROM Uczniowie WHERE username = ?");
+            pstmt->setString(1, studentUsername);
+            sql::ResultSet* res = pstmt->executeQuery();
+            if (res->next()) {
+                studentId = res->getInt("id");
+            }
+            else {
+                cout << "Uczeń o podanym użytkowniku nie istnieje." << endl;
+                delete pstmt;
+                delete res;
+                return;
+            }
+
+            // Dodaj uwagę do bazy danych
+            pstmt = con->prepareStatement("INSERT INTO Uwagi (id_ucznia, tresc) VALUES (?, ?)");
+            pstmt->setInt(1, studentId);
+            pstmt->setString(2, commentContent);
+            pstmt->executeUpdate();
+
+            cout << "Uwaga została dodana pomyślnie." << endl;
+
+            delete pstmt;
+            delete res;
+        }
+        catch (sql::SQLException& e) {
+            cout << "Błąd SQL: " << e.what() << endl;
+        }
+    }
+
+    void viewClassStudents() {
+        try {
+            string className;
+            cout << "Wpisz nazwę klasy: ";
+            cin >> className;
+
+            // Pobierz identyfikator klasy na podstawie nazwy klasy
+            sql::PreparedStatement* pstmt;
+            pstmt = con->prepareStatement("SELECT id FROM Klasy WHERE nazwa = ?");
+            pstmt->setString(1, className);
+            sql::ResultSet* res = pstmt->executeQuery();
+
+            int classId;
+            if (res->next()) {
+                classId = res->getInt("id");
+            }
+            else {
+                cout << "Klasa o podanej nazwie nie istnieje." << endl;
+                delete pstmt;
+                delete res;
+                return;
+            }
+            delete res;
+
+            // Pobierz listę uczniów przypisanych do tej klasy
+            pstmt = con->prepareStatement("SELECT o.id, o.imie, o.nazwisko FROM Osoby o JOIN Klasy_Uczniowie ku ON o.id = ku.id_ucznia WHERE ku.id_klasy = ?");
+            pstmt->setInt(1, classId);
+            res = pstmt->executeQuery();
+
+            map<int, pair<int, pair<string, string>>> students;
+            int counter = 1;
+            while (res->next()) {
+                int studentId = res->getInt("id");
+                string studentName = res->getString("imie");
+                string studentSurname = res->getString("nazwisko");
+                students[counter] = make_pair(studentId, make_pair(studentName, studentSurname));
+                cout << counter << ". " << studentName << " " << studentSurname << endl;
+                counter++;
+            }
+
+            if (students.empty()) {
+                cout << "W tej klasie nie ma żadnych uczniów." << endl;
+                delete pstmt;
+                delete res;
+                return;
+            }
+
+            int choice;
+            cout << "Wybierz numer ucznia, aby zobaczyć szczegóły: ";
+            cin >> choice;
+
+            if (students.find(choice) != students.end()) {
+                int studentId = students[choice].first;
+
+                // Wyświetl szczegóły ucznia
+                cout << "Informacje o uczniu:" << endl;
+                pstmt = con->prepareStatement("SELECT * FROM Osoby WHERE id = ?");
+                pstmt->setInt(1, studentId);
+                res = pstmt->executeQuery();
+
+                if (res->next()) {
+                    cout << "Imię: " << res->getString("imie") << endl;
+                    cout << "Nazwisko: " << res->getString("nazwisko") << endl;
+                    cout << "Data urodzenia: " << res->getString("data_urodzenia") << endl;
+                    cout << "PESEL: " << res->getString("pesel") << endl;
+                    cout << "Adres: " << res->getString("adres") << endl;
+                    cout << "Telefon: " << res->getString("telefon") << endl;
+                    cout << "Email: " << res->getString("email") << endl;
+                }
+                delete res;
+
+                // Wyświetl oceny ucznia
+                cout << "\nOceny ucznia:" << endl;
+                pstmt = con->prepareStatement(
+                    "SELECT p.nazwa, o.ocena, o.data_oceny, o.opis FROM Oceny o "
+                    "JOIN Przedmioty p ON o.id_przedmiotu = p.id WHERE o.id_ucznia = ?");
+                pstmt->setInt(1, studentId);
+                res = pstmt->executeQuery();
+
+                while (res->next()) {
+                    cout << "Przedmiot: " << res->getString("nazwa") << ", Ocena: " << res->getDouble("ocena")
+                        << ", Data: " << res->getString("data_oceny") << ", Opis: " << res->getString("opis") << endl;
+                }
+                delete res;
+
+                // Wyświetl uwagi ucznia
+                cout << "\nUwagi ucznia:" << endl;
+                pstmt = con->prepareStatement("SELECT * FROM Uwagi WHERE id_ucznia = ?");
+                pstmt->setInt(1, studentId);
+                res = pstmt->executeQuery();
+
+                while (res->next()) {
+                    cout << "Uwaga: " << res->getString("tresc") << endl;
+                }
+                delete res;
+            }
+            else {
+                cout << "Nieprawidłowy wybór ucznia." << endl;
+            }
+
+            delete pstmt;
+        }
+        catch (sql::SQLException& e) {
+            cout << "Błąd SQL: " << e.what() << endl;
+        }
+    }
+
     void teacherMenu() {
         int choice;
         do {
             cout << "\n--- Menu Nauczyciela ---\n";
             cout << "1. Dodaj ocenę\n";
-            cout << "2. Wyloguj\n";
+            cout << "2. Dodaj uwagę\n";
+            cout << "3. Wyświetl uczniów klasy\n";
+            cout << "4. Wyloguj\n";
             cout << "Twój wybór: ";
             cin >> choice;
 
@@ -190,6 +340,12 @@ public:
                 addGrade();
                 break;
             case 2:
+                addComment();
+                break;
+            case 3:
+                viewClassStudents();
+                break;
+            case 4:
                 return;
             default:
                 cout << "Nieprawidłowy wybór. Spróbuj ponownie." << endl;
