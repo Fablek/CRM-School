@@ -528,57 +528,66 @@ public:
     }
 
     void assignStudentToClass() {
-        string className, studentName, studentSurname;
-        cout << "Wpisz nazwę klasy: ";
-        cin >> className;
-        cout << "Wpisz imię ucznia: ";
-        cin >> studentName;
-        cout << "Wpisz nazwisko ucznia: ";
-        cin >> studentSurname;
-
         try {
+            // Pobierz listę wszystkich uczniów
             sql::PreparedStatement* pstmt;
-            pstmt = con->prepareStatement("SELECT id FROM Klasy WHERE nazwa=?");
-            pstmt->setString(1, className);
+            pstmt = con->prepareStatement("SELECT id, imie, nazwisko FROM Osoby WHERE id IN (SELECT id FROM Uczniowie)");
             sql::ResultSet* res = pstmt->executeQuery();
 
-            int classId;
-            if (res->next()) {
-                classId = res->getInt("id");
+            map<int, pair<int, string>> students;
+            int counter = 1;
+            cout << "Wybierz ucznia:" << endl;
+            while (res->next()) {
+                int studentId = res->getInt("id");
+                string studentName = res->getString("imie");
+                string studentSurname = res->getString("nazwisko");
+                students[counter] = make_pair(studentId, studentName + " " + studentSurname);
+                cout << counter << ". " << studentName << " " << studentSurname << endl;
+                counter++;
             }
-            else {
-                cout << "Klasa nie została znaleziona." << endl;
-                delete pstmt;
-                delete res;
-                return;
-            }
-
+            delete pstmt;
             delete res;
 
-            pstmt = con->prepareStatement("SELECT id FROM Osoby WHERE imie=? AND nazwisko=?");
-            pstmt->setString(1, studentName);
-            pstmt->setString(2, studentSurname);
+            // Wybierz ucznia
+            int studentChoice;
+            cout << "Podaj numer ucznia: ";
+            cin >> studentChoice;
+
+            int studentId = students[studentChoice].first;
+            string studentFullName = students[studentChoice].second;
+
+            // Pobierz listę klas, do których ucznik jeszcze nie jest przypisany
+            pstmt = con->prepareStatement("SELECT id, nazwa FROM Klasy WHERE id NOT IN (SELECT id FROM Klasy_Uczniowie WHERE id_ucznia=?)");
+            pstmt->setInt(1, studentId);
             res = pstmt->executeQuery();
 
-            int studentId;
-            if (res->next()) {
-                studentId = res->getInt("id");
+            map<int, pair<int, string>> classes;
+            counter = 1;
+            cout << "Wybierz klasę do przypisania ucznia " << studentFullName << ":" << endl;
+            while (res->next()) {
+                int classId = res->getInt("id");
+                string className = res->getString("nazwa");
+                classes[counter] = make_pair(classId, className);
+                cout << counter << ". " << className << endl;
+                counter++;
             }
-            else {
-                cout << "Uczeń nie został znaleziony." << endl;
-                delete pstmt;
-                delete res;
-                return;
-            }
-
+            delete pstmt;
             delete res;
 
+            // Wybierz klasę do przypisania ucznia
+            int classChoice;
+            cout << "Podaj numer klasy: ";
+            cin >> classChoice;
+
+            int classId = classes[classChoice].first;
+
+            // Wstaw ucznia do wybranej klasy
             pstmt = con->prepareStatement("INSERT INTO Klasy_Uczniowie (id_klasy, id_ucznia) VALUES (?, ?)");
             pstmt->setInt(1, classId);
             pstmt->setInt(2, studentId);
             pstmt->executeUpdate();
 
-            cout << "Uczeń został przypisany do klasy." << endl;
+            cout << "Uczeń " << studentFullName << " został przypisany do klasy." << endl;
 
             delete pstmt;
         }
