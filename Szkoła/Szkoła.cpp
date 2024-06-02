@@ -776,6 +776,37 @@ public:
         }
     }
 
+    void addSubject() {
+        clearConsole();
+
+        try {
+            string subjectName;
+            cout << "Podaj nazwę nowego przedmiotu: ";
+            cin.ignore();
+            getline(cin, subjectName);
+
+            sql::PreparedStatement* pstmt = con->prepareStatement("INSERT INTO Przedmioty (nazwa) VALUES (?)");
+            pstmt->setString(1, subjectName);
+
+            int updateCount = pstmt->executeUpdate();
+
+            if (updateCount > 0) {
+                cout << "Przedmiot " << subjectName << " został dodany." << endl;
+            }
+            else {
+                cout << "Nie udało się dodać przedmiotu." << endl;
+            }
+
+            delete pstmt;
+        }
+        catch (sql::SQLException& e) {
+            cout << "Błąd SQL: " << e.what() << endl;
+        }
+
+        pressEnterToContinue();
+        clearConsole();
+    }
+
     void assignStudentToClass() {
         clearConsole();
 
@@ -957,10 +988,11 @@ public:
             cout << "1. Dodaj nauczyciela\n";
             cout << "2. Dodaj ucznia\n";
             cout << "3. Utwórz klasę\n";
-            cout << "4. Przypisz ucznia do klasy\n";
-            cout << "5. Przypisz nauczyciela do klasy\n";
-            cout << "6. Przypisz nauczyciela do przedmiotu\n";
-            cout << "7. Wyloguj\n";
+            cout << "4. Utwórz przedmiot\n";
+            cout << "5. Przypisz ucznia do klasy\n";
+            cout << "6. Przypisz nauczyciela do klasy\n";
+            cout << "7. Przypisz nauczyciela do przedmiotu\n";
+            cout << "8. Wyloguj\n";
             cout << "Twój wybór: ";
             cin >> choice;
 
@@ -975,15 +1007,18 @@ public:
                 createClass();
                 break;
             case 4:
-                assignStudentToClass();
+                addSubject();
                 break;
             case 5:
+                assignStudentToClass();
+                break;
+            case 6:
                 assignTeacherToClass();
                 break;
-            case 6: 
+            case 7: 
                 assignTeacherToSubject();
                 break;
-            case 7:
+            case 8:
                 return;
             default:
                 cout << "Nieprawidłowy wybór. Spróbuj ponownie." << endl;
