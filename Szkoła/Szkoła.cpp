@@ -19,10 +19,28 @@ private:
     sql::Connection* con;
 
 public:
-    DatabaseManager() {
-        driver = get_driver_instance();
-        con = driver->connect(server, username, password);
-        con->setSchema(db);
+    DatabaseManager() : driver(nullptr), con(nullptr) {}
+
+    DatabaseManager(const std::string& server, const std::string& username, const std::string& password, const std::string& db) {
+        try {
+            driver = get_driver_instance();
+            con = driver->connect(server, username, password);
+            con->setSchema(db);
+        }
+        catch (sql::SQLException& e) {
+            std::cerr << "Wyjątek SQL: " << e.what() << std::endl;
+            std::cerr << "Kod błędu MySQL: " << e.getErrorCode() << std::endl;
+            std::cerr << "SQLState: " << e.getSQLState() << std::endl;
+            // Obsługa wyjątku (np. cleanup, ponowne rzucenie wyjątku itp.)
+        }
+        catch (std::exception& e) {
+            std::cerr << "Standardowy wyjątek: " << e.what() << std::endl;
+            // Obsługa wyjątku (np. cleanup, ponowne rzucenie wyjątku itp.)
+        }
+        catch (...) {
+            std::cerr << "Złapano nieznany wyjątek" << std::endl;
+            // Obsługa wyjątku (np. cleanup, ponowne rzucenie wyjątku itp.)
+        }
     }
 
     ~DatabaseManager() {
@@ -348,6 +366,7 @@ public:
                 clearConsole();
 
                 string className = classes[classChoice];
+
 
                 // Pobierz identyfikator wybranej klasy
                 pstmt = con->prepareStatement("SELECT id FROM Klasy WHERE nazwa = ?");
@@ -1030,7 +1049,7 @@ public:
 int main() {
     setlocale(LC_CTYPE, "polish");
 
-    DatabaseManager dbManager;
+    DatabaseManager dbManager(server, username, password, db);
     sql::Connection* con = dbManager.getConnection();
 
     if (con) {
