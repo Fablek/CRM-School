@@ -253,6 +253,125 @@ public:
         clearConsole();
     }
 
+    void deleteGrade() {
+        clearConsole();
+
+        try {
+            // Pobierz listę uczniów
+            sql::PreparedStatement* pstmt = nullptr;
+            pstmt = con->prepareStatement("SELECT id, username FROM Uczniowie");
+            sql::ResultSet* res = pstmt->executeQuery();
+
+            map<int, string> students;
+            int studentCounter = 1;
+            cout << "Dostępni uczniowie:" << endl;
+            while (res->next()) {
+                int studentId = res->getInt("id");
+                string studentUsername = res->getString("username");
+                students[studentCounter] = studentUsername;
+                cout << studentCounter << ". " << studentUsername << endl;
+                studentCounter++;
+            }
+
+            // Zwolnij pamięć tylko jeśli wskaźnik został zainicjowany
+            if (res != nullptr) {
+                delete res;
+            }
+
+            if (students.empty()) {
+                cout << "Brak dostępnych uczniów." << endl;
+                delete pstmt;
+                return;
+            }
+
+            int studentChoice;
+            cout << "Wybierz numer ucznia: ";
+            cin >> studentChoice;
+
+            if (students.find(studentChoice) != students.end()) {
+                string studentUsername = students[studentChoice];
+
+                // Pobierz identyfikator wybranego ucznia
+                int studentId;
+                pstmt = con->prepareStatement("SELECT id FROM Uczniowie WHERE username = ?");
+                pstmt->setString(1, studentUsername);
+                res = pstmt->executeQuery();
+                if (res->next()) {
+                    studentId = res->getInt("id");
+
+                    // Wyświetl oceny wybranego ucznia
+                    cout << "\nOceny ucznia:" << endl;
+                    pstmt = con->prepareStatement(
+                        "SELECT o.id, p.nazwa AS przedmiot, o.ocena, o.data_oceny, o.opis "
+                        "FROM Oceny o "
+                        "JOIN Przedmioty p ON o.id_przedmiotu = p.id "
+                        "WHERE o.id_ucznia = ?");
+                    pstmt->setInt(1, studentId);
+                    res = pstmt->executeQuery();
+
+                    map<int, tuple<string, double, string, string>> grades;
+                    int gradeCounter = 1;
+                    while (res->next()) {
+                        int gradeId = res->getInt("id");
+                        string subjectName = res->getString("przedmiot");
+                        double gradeValue = res->getDouble("ocena");
+                        string gradeDate = res->getString("data_oceny");
+                        string gradeDescription = res->getString("opis");
+                        cout << gradeCounter << ". Przedmiot: " << subjectName << ", Ocena: " << gradeValue
+                            << ", Data: " << gradeDate << ", Opis: " << gradeDescription << endl;
+                        grades[gradeCounter] = make_tuple(subjectName, gradeValue, gradeDate, gradeDescription);
+                        gradeCounter++;
+                    }
+
+                    // Zwolnij pamięć tylko jeśli wskaźnik został zainicjowany
+                    if (res != nullptr) {
+                        delete res;
+                    }
+
+                    if (!grades.empty()) {
+                        int gradeChoice;
+                        cout << "Wybierz numer oceny do usunięcia: ";
+                        cin >> gradeChoice;
+
+                        if (grades.find(gradeChoice) != grades.end()) {
+                            int gradeIdToDelete = std::stoi(std::get<0>(grades[gradeChoice]));
+
+                            // Usuń ocenę z bazy danych
+                            pstmt = con->prepareStatement("DELETE FROM Oceny WHERE id = ?");
+                            pstmt->setInt(1, gradeIdToDelete);
+                            pstmt->executeUpdate();
+
+                            cout << "Ocena została usunięta pomyślnie." << endl;
+                        }
+                        else {
+                            cout << "Nieprawidłowy wybór oceny." << endl;
+                        }
+                    }
+                    else {
+                        cout << "Ten uczeń nie ma jeszcze żadnych ocen." << endl;
+                    }
+                }
+                else {
+                    cout << "Uczeń o podanym użytkowniku nie istnieje." << endl;
+                }
+
+                // Zwolnij pamięć tylko jeśli wskaźnik został zainicjowany
+                if (pstmt != nullptr) {
+                    delete pstmt;
+                }
+            }
+            else {
+                cout << "Nieprawidłowy wybór ucznia." << endl;
+            }
+        }
+        catch (sql::SQLException& e) {
+            cout << "Błąd SQL: " << e.what() << endl;
+        }
+
+        pressEnterToContinue();
+        clearConsole();
+    }
+
     void addComment() {
         clearConsole();
 
@@ -482,9 +601,10 @@ public:
 
             cout << "\n--- Menu Nauczyciela ---\n";
             cout << "1. Dodaj ocenę\n";
-            cout << "2. Dodaj uwagę\n";
-            cout << "3. Wyświetl uczniów klasy\n";
-            cout << "4. Wyloguj\n";
+            cout << "2. Usuń ocenę\n";
+            cout << "3. Dodaj uwagę\n";
+            cout << "4. Wyświetl uczniów klasy\n";
+            cout << "5. Wyloguj\n";
             cout << "Twój wybór: ";
             cin >> choice;
 
@@ -493,12 +613,15 @@ public:
                 addGrade();
                 break;
             case 2:
-                addComment();
+                deleteGrade();
                 break;
             case 3:
-                viewClassStudents();
+                addComment();
                 break;
             case 4:
+                viewClassStudents();
+                break;
+            case 5:
                 return;
             default:
                 cout << "Nieprawidłowy wybór. Spróbuj ponownie." << endl;
