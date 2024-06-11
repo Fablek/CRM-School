@@ -367,7 +367,6 @@ public:
 
                 string className = classes[classChoice];
 
-
                 // Pobierz identyfikator wybranej klasy
                 pstmt = con->prepareStatement("SELECT id FROM Klasy WHERE nazwa = ?");
                 pstmt->setString(1, className);
@@ -611,6 +610,72 @@ public:
         }
     }
 
+    void removeTeacher() {
+        clearConsole();
+
+        try {
+            sql::PreparedStatement* pstmt = nullptr;
+            sql::ResultSet* res = nullptr;
+
+            // Pobranie listy nauczycieli
+            pstmt = con->prepareStatement("SELECT id, username FROM Nauczyciele");
+            res = pstmt->executeQuery();
+
+            map<int, string> teachers;
+            int teacherCounter = 1;
+            cout << "Dostępni nauczyciele:" << endl;
+            while (res->next()) {
+                int teacherId = res->getInt("id");
+                string teacherUsername = res->getString("username");
+                teachers[teacherCounter] = teacherUsername;
+                cout << teacherCounter << ". " << teacherUsername << endl;
+                teacherCounter++;
+            }
+            delete res;
+
+            if (teachers.empty()) {
+                cout << "Brak dostępnych nauczycieli." << endl;
+                delete pstmt;
+                return;
+            }
+
+            int teacherChoice;
+            cout << "Wybierz numer nauczyciela do usunięcia: ";
+            cin >> teacherChoice;
+
+            if (teachers.find(teacherChoice) == teachers.end()) {
+                cout << "Nieprawidłowy wybór nauczyciela." << endl;
+                delete pstmt;
+                return;
+            }
+
+            string teacherUsername = teachers[teacherChoice];
+
+            // Usunięcie nauczyciela
+            pstmt = con->prepareStatement("DELETE FROM Nauczyciele WHERE username = ?");
+            pstmt->setString(1, teacherUsername);
+
+            int updateCount = pstmt->executeUpdate();
+
+            if (updateCount > 0) {
+                cout << "Nauczyciel " << teacherUsername << " został usunięty." << endl;
+            }
+            else {
+                cout << "Nie udało się usunąć nauczyciela." << endl;
+            }
+
+            if (pstmt != nullptr) {
+                delete pstmt;
+            }
+        }
+        catch (sql::SQLException& e) {
+            cout << "Błąd SQL: " << e.what() << endl;
+        }
+
+        pressEnterToContinue();
+        clearConsole();
+    }
+
     void assignTeacherToClass() {
         clearConsole();
 
@@ -712,7 +777,6 @@ public:
         clearConsole();
     }
 
-
     void addStudent() {
         clearConsole();
 
@@ -773,6 +837,72 @@ public:
         }
     }
 
+    void removeStudent() {
+        clearConsole();
+
+        try {
+            sql::PreparedStatement* pstmt = nullptr;
+            sql::ResultSet* res = nullptr;
+
+            // Pobranie listy uczniów
+            pstmt = con->prepareStatement("SELECT id, username FROM Uczniowie");
+            res = pstmt->executeQuery();
+
+            map<int, string> students;
+            int studentCounter = 1;
+            cout << "Dostępni uczniowie:" << endl;
+            while (res->next()) {
+                int studentId = res->getInt("id");
+                string studentUsername = res->getString("username");
+                students[studentCounter] = studentUsername;
+                cout << studentCounter << ". " << studentUsername << endl;
+                studentCounter++;
+            }
+            delete res;
+
+            if (students.empty()) {
+                cout << "Brak dostępnych uczniów." << endl;
+                delete pstmt;
+                return;
+            }
+
+            int studentChoice;
+            cout << "Wybierz numer ucznia do usunięcia: ";
+            cin >> studentChoice;
+
+            if (students.find(studentChoice) == students.end()) {
+                cout << "Nieprawidłowy wybór ucznia." << endl;
+                delete pstmt;
+                return;
+            }
+
+            string studentUsername = students[studentChoice];
+
+            // Usunięcie ucznia
+            pstmt = con->prepareStatement("DELETE FROM Uczniowie WHERE username = ?");
+            pstmt->setString(1, studentUsername);
+
+            int updateCount = pstmt->executeUpdate();
+
+            if (updateCount > 0) {
+                cout << "Uczeń " << studentUsername << " został usunięty." << endl;
+            }
+            else {
+                cout << "Nie udało się usunąć ucznia." << endl;
+            }
+
+            if (pstmt != nullptr) {
+                delete pstmt;
+            }
+        }
+        catch (sql::SQLException& e) {
+            cout << "Błąd SQL: " << e.what() << endl;
+        }
+
+        pressEnterToContinue();
+        clearConsole();
+    }
+
     void createClass() {
         clearConsole();
 
@@ -793,6 +923,72 @@ public:
         catch (sql::SQLException& e) {
             cout << "Błąd SQL: " << e.what() << endl;
         }
+    }
+
+    void removeClass() {
+        clearConsole();
+
+        try {
+            sql::PreparedStatement* pstmt = nullptr;
+            sql::ResultSet* res = nullptr;
+
+            // Pobranie listy klas
+            pstmt = con->prepareStatement("SELECT id, nazwa FROM Klasy");
+            res = pstmt->executeQuery();
+
+            map<int, string> classes;
+            int classCounter = 1;
+            cout << "Dostępne klasy:" << endl;
+            while (res->next()) {
+                int classId = res->getInt("id");
+                string className = res->getString("nazwa");
+                classes[classCounter] = className;
+                cout << classCounter << ". " << className << endl;
+                classCounter++;
+            }
+            delete res;
+
+            if (classes.empty()) {
+                cout << "Brak dostępnych klas." << endl;
+                delete pstmt;
+                return;
+            }
+
+            int classChoice;
+            cout << "Wybierz numer klasy do usunięcia: ";
+            cin >> classChoice;
+
+            if (classes.find(classChoice) == classes.end()) {
+                cout << "Nieprawidłowy wybór klasy." << endl;
+                delete pstmt;
+                return;
+            }
+
+            string className = classes[classChoice];
+
+            // Usunięcie klasy
+            pstmt = con->prepareStatement("DELETE FROM Klasy WHERE nazwa = ?");
+            pstmt->setString(1, className);
+
+            int updateCount = pstmt->executeUpdate();
+
+            if (updateCount > 0) {
+                cout << "Klasa " << className << " została usunięta." << endl;
+            }
+            else {
+                cout << "Nie udało się usunąć klasy." << endl;
+            }
+
+            if (pstmt != nullptr) {
+                delete pstmt;
+            }
+        }
+        catch (sql::SQLException& e) {
+            cout << "Błąd SQL: " << e.what() << endl;
+        }
+
+        pressEnterToContinue();
+        clearConsole();
     }
 
     void addSubject() {
@@ -817,6 +1013,72 @@ public:
             }
 
             delete pstmt;
+        }
+        catch (sql::SQLException& e) {
+            cout << "Błąd SQL: " << e.what() << endl;
+        }
+
+        pressEnterToContinue();
+        clearConsole();
+    }
+
+    void removeSubject() {
+        clearConsole();
+
+        try {
+            sql::PreparedStatement* pstmt = nullptr;
+            sql::ResultSet* res = nullptr;
+
+            // Pobranie listy przedmiotów
+            pstmt = con->prepareStatement("SELECT id, nazwa FROM Przedmioty");
+            res = pstmt->executeQuery();
+
+            map<int, string> subjects;
+            int subjectCounter = 1;
+            cout << "Dostępne przedmioty:" << endl;
+            while (res->next()) {
+                int subjectId = res->getInt("id");
+                string subjectName = res->getString("nazwa");
+                subjects[subjectCounter] = subjectName;
+                cout << subjectCounter << ". " << subjectName << endl;
+                subjectCounter++;
+            }
+            delete res;
+
+            if (subjects.empty()) {
+                cout << "Brak dostępnych przedmiotów." << endl;
+                delete pstmt;
+                return;
+            }
+
+            int subjectChoice;
+            cout << "Wybierz numer przedmiotu do usunięcia: ";
+            cin >> subjectChoice;
+
+            if (subjects.find(subjectChoice) == subjects.end()) {
+                cout << "Nieprawidłowy wybór przedmiotu." << endl;
+                delete pstmt;
+                return;
+            }
+
+            string subjectName = subjects[subjectChoice];
+
+            // Usunięcie przedmiotu
+            pstmt = con->prepareStatement("DELETE FROM Przedmioty WHERE nazwa = ?");
+            pstmt->setString(1, subjectName);
+
+            int updateCount = pstmt->executeUpdate();
+
+            if (updateCount > 0) {
+                cout << "Przedmiot " << subjectName << " został usunięty." << endl;
+            }
+            else {
+                cout << "Nie udało się usunąć przedmiotu." << endl;
+            }
+
+            if (pstmt != nullptr) {
+                delete pstmt;
+            }
         }
         catch (sql::SQLException& e) {
             cout << "Błąd SQL: " << e.what() << endl;
@@ -1011,7 +1273,11 @@ public:
             cout << "5. Przypisz ucznia do klasy\n";
             cout << "6. Przypisz nauczyciela do klasy\n";
             cout << "7. Przypisz nauczyciela do przedmiotu\n";
-            cout << "8. Wyloguj\n";
+            cout << "8. Usuń nauczyciela\n";
+            cout << "9. Usuń ucznia\n";
+            cout << "10. Usuń klasę\n";
+            cout << "11. Usuń przedmiot\n";
+            cout << "12. Wyloguj\n";
             cout << "Twój wybór: ";
             cin >> choice;
 
@@ -1034,10 +1300,22 @@ public:
             case 6:
                 assignTeacherToClass();
                 break;
-            case 7: 
+            case 7:
                 assignTeacherToSubject();
                 break;
             case 8:
+                removeTeacher();
+                break;
+            case 9:
+                removeStudent();
+                break;
+            case 10:
+                removeClass();
+                break;
+            case 11:
+                removeSubject();
+                break;
+            case 12:
                 return;
             default:
                 cout << "Nieprawidłowy wybór. Spróbuj ponownie." << endl;
