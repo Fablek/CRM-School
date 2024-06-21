@@ -66,8 +66,8 @@ void Admin::addTeacher() {
     std::cin >> teacherPassword;
 
     try {
-        sql::PreparedStatement* pstmt;
-        pstmt = con->prepareStatement("INSERT INTO Osoby (imie, nazwisko, data_urodzenia, pesel, adres, telefon, email) VALUES (?, ?, ?, ?, ?, ?, ?)");
+        con->setAutoCommit(false); // Rozpoczyna transakcjê
+        sql::PreparedStatement* pstmt = con->prepareStatement("INSERT INTO osoby (imie, nazwisko, data_urodzenia, pesel, adres, telefon, email) VALUES (?, ?, ?, ?, ?, ?, ?)");
         pstmt->setString(1, teacherName);
         pstmt->setString(2, teacherSurname);
         pstmt->setString(3, teacherDob);
@@ -78,28 +78,38 @@ void Admin::addTeacher() {
         pstmt->executeUpdate();
         delete pstmt;
 
-        pstmt = con->prepareStatement("SELECT id FROM Osoby WHERE pesel=?");
+        pstmt = con->prepareStatement("SELECT id FROM osoby WHERE pesel=?");
         pstmt->setString(1, teacherPesel);
         sql::ResultSet* res = pstmt->executeQuery();
 
-        int teacherId;
+        int teacherId = 0;
         if (res->next()) {
             teacherId = res->getInt("id");
-            pstmt = con->prepareStatement("INSERT INTO Nauczyciele (id, username, password) VALUES (?, ?, ?)");
+        }
+        delete pstmt;
+        delete res;
+
+        if (teacherId > 0) {
+            pstmt = con->prepareStatement("INSERT INTO nauczyciele (id, username, password) VALUES (?, ?, ?)");
             pstmt->setInt(1, teacherId);
             pstmt->setString(2, teacherUsername);
             pstmt->setString(3, teacherPassword);
             pstmt->executeUpdate();
+            delete pstmt;
 
+            con->commit(); // Zatwierdza transakcjê
             std::cout << "Nauczyciel zosta³ dodany pomyœlnie." << std::endl;
         }
-
-        delete pstmt;
-        delete res;
+        else {
+            std::cout << "Nie znaleziono osoby o podanym PESEL w bazie danych." << std::endl;
+            con->rollback(); // Wycofuje transakcjê
+        }
     }
     catch (sql::SQLException& e) {
         std::cout << "B³¹d SQL: " << e.what() << std::endl;
+        con->rollback(); // Wycofuje transakcjê w przypadku b³êdu
     }
+    clearConsole();
 }
 
 void Admin::editTeacher() {
@@ -905,22 +915,23 @@ void Admin::assignTeacherToClass() {
     clearConsole();
 
     try {
+        // Retrieve and display teachers
         sql::PreparedStatement* pstmt = con->prepareStatement("SELECT id, username FROM Nauczyciele");
         sql::ResultSet* res = pstmt->executeQuery();
 
-        std::map<int, std::string> teachers;
+        std::map<int, int> teacherMap;
         int teacherCounter = 1;
         std::cout << "Dostêpni nauczyciele:" << std::endl;
         while (res->next()) {
             int teacherId = res->getInt("id");
             std::string teacherUsername = res->getString("username");
-            teachers[teacherCounter] = teacherUsername;
+            teacherMap[teacherCounter] = teacherId;
             std::cout << teacherCounter << ". " << teacherUsername << std::endl;
             teacherCounter++;
         }
         delete res;
 
-        if (teachers.empty()) {
+        if (teacherMap.empty()) {
             std::cout << "Brak dostêpnych nauczycieli." << std::endl;
             delete pstmt;
             return;
@@ -930,63 +941,55 @@ void Admin::assignTeacherToClass() {
         std::cout << "Wybierz numer nauczyciela: ";
         std::cin >> teacherChoice;
 
-        if (teachers.find(teacherChoice) != teachers.end()) {
-            std::string teacherUsername = teachers[teacherChoice];
-
-            int teacherId;
-            pstmt = con->prepareStatement("SELECT id FROM Nauczyciele WHERE username = ?");
-            pstmt->setString(1, teacherUsername);
-            res = pstmt->executeQuery();
-            if (res->next()) {
-                teacherId = res->getInt("id");
-
-                pstmt = con->prepareStatement("SELECT id, nazwa FROM Klasy");
-                res = pstmt->executeQuery();
-
-                std::map<int, std::string> classes;
-                int classCounter = 1;
-                std::cout << "Dostêpne klasy:" << std::endl;
-                while (res->next()) {
-                    int classId = res->getInt("id");
-                    std::string className = res->getString("nazwa");
-                    classes[classCounter] = className;
-                    std::cout << classCounter << ". " << className << std::endl;
-                    classCounter++;
-                }
-                delete res;
-
-                if (classes.empty()) {
-                    std::cout << "Brak dostêpnych klas." << std::endl;
-                    delete pstmt;
-                    return;
-                }
-
-                int classChoice;
-                std::cout << "Wybierz numer klasy: ";
-                std::cin >> classChoice;
-
-                if (classes.find(classChoice) != classes.end()) {
-                    int classId = std::stoi(classes[classChoice]);
-
-                    pstmt = con->prepareStatement("INSERT INTO Nauczyciele_Klasy (id_nauczyciela, id_klasy) VALUES (?, ?)");
-                    pstmt->setInt(1, teacherId);
-                    pstmt->setInt(2, classId);
-                    pstmt->executeUpdate();
-
-                    std::cout << "Nauczyciel zosta³ przypisany do klasy pomyœlnie." << std::endl;
-                }
-                else {
-                    std::cout << "Nieprawid³owy wybór klasy." << std::endl;
-                }
-            }
-            else {
-                std::cout << "Nauczyciel o podanym u¿ytkowniku nie istnieje." << std::endl;
-            }
-            delete res;
-        }
-        else {
+        if (teacherMap.find(teacherChoice) == teacherMap.end()) {
             std::cout << "Nieprawid³owy wybór nauczyciela." << std::endl;
+            delete pstmt;
+            return;
         }
+
+        int teacherId = teacherMap[teacherChoice];
+
+        // Retrieve and display classes
+        pstmt = con->prepareStatement("SELECT id, nazwa FROM Klasy");
+        res = pstmt->executeQuery();
+
+        std::map<int, int> classMap;
+        int classCounter = 1;
+        std::cout << "Dostêpne klasy:" << std::endl;
+        while (res->next()) {
+            int classId = res->getInt("id");
+            std::string className = res->getString("nazwa");
+            classMap[classCounter] = classId;
+            std::cout << classCounter << ". " << className << std::endl;
+            classCounter++;
+        }
+        delete res;
+
+        if (classMap.empty()) {
+            std::cout << "Brak dostêpnych klas." << std::endl;
+            delete pstmt;
+            return;
+        }
+
+        int classChoice;
+        std::cout << "Wybierz numer klasy: ";
+        std::cin >> classChoice;
+
+        if (classMap.find(classChoice) == classMap.end()) {
+            std::cout << "Nieprawid³owy wybór klasy." << std::endl;
+            delete pstmt;
+            return;
+        }
+
+        int classId = classMap[classChoice];
+
+        // Assign teacher to class
+        pstmt = con->prepareStatement("INSERT INTO Nauczyciele_Klasy (id_nauczyciela, id_klasy) VALUES (?, ?)");
+        pstmt->setInt(1, teacherId);
+        pstmt->setInt(2, classId);
+        pstmt->executeUpdate();
+
+        std::cout << "Nauczyciel zosta³ przypisany do klasy pomyœlnie." << std::endl;
 
         if (pstmt != nullptr) {
             delete pstmt;
@@ -1000,6 +1003,7 @@ void Admin::assignTeacherToClass() {
     clearConsole();
 }
 
+
 void Admin::assignTeacherToSubject() {
     clearConsole();
 
@@ -1007,19 +1011,19 @@ void Admin::assignTeacherToSubject() {
         sql::PreparedStatement* pstmt = con->prepareStatement("SELECT id, username FROM Nauczyciele");
         sql::ResultSet* res = pstmt->executeQuery();
 
-        std::map<int, std::string> teachers;
+        std::map<int, int> teacherMap;
         int teacherCounter = 1;
         std::cout << "Dostêpni nauczyciele:" << std::endl;
         while (res->next()) {
             int teacherId = res->getInt("id");
             std::string teacherUsername = res->getString("username");
-            teachers[teacherCounter] = teacherUsername;
+            teacherMap[teacherCounter] = teacherId;
             std::cout << teacherCounter << ". " << teacherUsername << std::endl;
             teacherCounter++;
         }
         delete res;
 
-        if (teachers.empty()) {
+        if (teacherMap.empty()) {
             std::cout << "Brak dostêpnych nauczycieli." << std::endl;
             delete pstmt;
             return;
@@ -1029,63 +1033,53 @@ void Admin::assignTeacherToSubject() {
         std::cout << "Wybierz numer nauczyciela: ";
         std::cin >> teacherChoice;
 
-        if (teachers.find(teacherChoice) != teachers.end()) {
-            std::string teacherUsername = teachers[teacherChoice];
-
-            int teacherId;
-            pstmt = con->prepareStatement("SELECT id FROM Nauczyciele WHERE username = ?");
-            pstmt->setString(1, teacherUsername);
-            res = pstmt->executeQuery();
-            if (res->next()) {
-                teacherId = res->getInt("id");
-
-                pstmt = con->prepareStatement("SELECT id, nazwa FROM Przedmioty");
-                res = pstmt->executeQuery();
-
-                std::map<int, std::string> subjects;
-                int subjectCounter = 1;
-                std::cout << "Dostêpne przedmioty:" << std::endl;
-                while (res->next()) {
-                    int subjectId = res->getInt("id");
-                    std::string subjectName = res->getString("nazwa");
-                    subjects[subjectCounter] = subjectName;
-                    std::cout << subjectCounter << ". " << subjectName << std::endl;
-                    subjectCounter++;
-                }
-                delete res;
-
-                if (subjects.empty()) {
-                    std::cout << "Brak dostêpnych przedmiotów." << std::endl;
-                    delete pstmt;
-                    return;
-                }
-
-                int subjectChoice;
-                std::cout << "Wybierz numer przedmiotu: ";
-                std::cin >> subjectChoice;
-
-                if (subjects.find(subjectChoice) != subjects.end()) {
-                    int subjectId = std::stoi(subjects[subjectChoice]);
-
-                    pstmt = con->prepareStatement("INSERT INTO Nauczyciele_Przedmioty (id_nauczyciela, id_przedmiotu) VALUES (?, ?)");
-                    pstmt->setInt(1, teacherId);
-                    pstmt->setInt(2, subjectId);
-                    pstmt->executeUpdate();
-
-                    std::cout << "Nauczyciel zosta³ przypisany do przedmiotu pomyœlnie." << std::endl;
-                }
-                else {
-                    std::cout << "Nieprawid³owy wybór przedmiotu." << std::endl;
-                }
-            }
-            else {
-                std::cout << "Nauczyciel o podanym u¿ytkowniku nie istnieje." << std::endl;
-            }
-            delete res;
-        }
-        else {
+        if (teacherMap.find(teacherChoice) == teacherMap.end()) {
             std::cout << "Nieprawid³owy wybór nauczyciela." << std::endl;
+            delete pstmt;
+            return;
         }
+
+        int teacherId = teacherMap[teacherChoice];
+
+        pstmt = con->prepareStatement("SELECT id, nazwa FROM Przedmioty");
+        res = pstmt->executeQuery();
+
+        std::map<int, int> subjectMap;
+        int subjectCounter = 1;
+        std::cout << "Dostêpne przedmioty:" << std::endl;
+        while (res->next()) {
+            int subjectId = res->getInt("id");
+            std::string subjectName = res->getString("nazwa");
+            subjectMap[subjectCounter] = subjectId;
+            std::cout << subjectCounter << ". " << subjectName << std::endl;
+            subjectCounter++;
+        }
+        delete res;
+
+        if (subjectMap.empty()) {
+            std::cout << "Brak dostêpnych przedmiotów." << std::endl;
+            delete pstmt;
+            return;
+        }
+
+        int subjectChoice;
+        std::cout << "Wybierz numer przedmiotu: ";
+        std::cin >> subjectChoice;
+
+        if (subjectMap.find(subjectChoice) == subjectMap.end()) {
+            std::cout << "Nieprawid³owy wybór przedmiotu." << std::endl;
+            delete pstmt;
+            return;
+        }
+
+        int subjectId = subjectMap[subjectChoice];
+
+        pstmt = con->prepareStatement("INSERT INTO Nauczyciele_Przedmioty (id_nauczyciela, id_przedmiotu) VALUES (?, ?)");
+        pstmt->setInt(1, teacherId);
+        pstmt->setInt(2, subjectId);
+        pstmt->executeUpdate();
+
+        std::cout << "Nauczyciel zosta³ przypisany do przedmiotu pomyœlnie." << std::endl;
 
         if (pstmt != nullptr) {
             delete pstmt;
@@ -1106,13 +1100,13 @@ void Admin::assignStudentToClass() {
         sql::PreparedStatement* pstmt = con->prepareStatement("SELECT id, username FROM Uczniowie");
         sql::ResultSet* res = pstmt->executeQuery();
 
-        std::map<int, std::string> students;
+        std::map<int, int> students;
         int studentCounter = 1;
         std::cout << "Dostêpni uczniowie:" << std::endl;
         while (res->next()) {
             int studentId = res->getInt("id");
             std::string studentUsername = res->getString("username");
-            students[studentCounter] = studentUsername;
+            students[studentCounter] = studentId;
             std::cout << studentCounter << ". " << studentUsername << std::endl;
             studentCounter++;
         }
@@ -1128,62 +1122,57 @@ void Admin::assignStudentToClass() {
         std::cout << "Wybierz numer ucznia: ";
         std::cin >> studentChoice;
 
-        if (students.find(studentChoice) != students.end()) {
-            std::string studentUsername = students[studentChoice];
+        if (students.find(studentChoice) == students.end()) {
+            std::cout << "Nieprawid³owy wybór ucznia." << std::endl;
+            delete pstmt;
+            return;
+        }
 
-            int studentId;
-            pstmt = con->prepareStatement("SELECT id FROM Uczniowie WHERE username = ?");
-            pstmt->setString(1, studentUsername);
-            res = pstmt->executeQuery();
-            if (res->next()) {
-                studentId = res->getInt("id");
+        int studentId = students[studentChoice];
 
-                pstmt = con->prepareStatement("SELECT id, nazwa FROM Klasy");
-                res = pstmt->executeQuery();
+        pstmt = con->prepareStatement("SELECT id, nazwa FROM Klasy");
+        res = pstmt->executeQuery();
 
-                std::map<int, std::string> classes;
-                int classCounter = 1;
-                std::cout << "Dostêpne klasy:" << std::endl;
-                while (res->next()) {
-                    int classId = res->getInt("id");
-                    std::string className = res->getString("nazwa");
-                    classes[classCounter] = className;
-                    std::cout << classCounter << ". " << className << std::endl;
-                    classCounter++;
-                }
-                delete res;
+        std::map<int, int> classes;
+        int classCounter = 1;
+        std::cout << "Dostêpne klasy:" << std::endl;
+        while (res->next()) {
+            int classId = res->getInt("id");
+            std::string className = res->getString("nazwa");
+            classes[classCounter] = classId;
+            std::cout << classCounter << ". " << className << std::endl;
+            classCounter++;
+        }
+        delete res;
 
-                if (classes.empty()) {
-                    std::cout << "Brak dostêpnych klas." << std::endl;
-                    delete pstmt;
-                    return;
-                }
+        if (classes.empty()) {
+            std::cout << "Brak dostêpnych klas." << std::endl;
+            delete pstmt;
+            return;
+        }
 
-                int classChoice;
-                std::cout << "Wybierz numer klasy: ";
-                std::cin >> classChoice;
+        int classChoice;
+        std::cout << "Wybierz numer klasy: ";
+        std::cin >> classChoice;
 
-                if (classes.find(classChoice) != classes.end()) {
-                    int classId = std::stoi(classes[classChoice]);
+        if (classes.find(classChoice) == classes.end()) {
+            std::cout << "Nieprawid³owy wybór klasy." << std::endl;
+            delete pstmt;
+            return;
+        }
 
-                    pstmt = con->prepareStatement("INSERT INTO Klasy_Uczniowie (id_ucznia, id_klasy) VALUES (?, ?)");
-                    pstmt->setInt(1, studentId);
-                    pstmt->setInt(2, classId);
-                    pstmt->executeUpdate();
+        int classId = classes[classChoice];
 
-                    std::cout << "Uczeñ zosta³ przypisany do klasy pomyœlnie." << std::endl;
-                }
-                else {
-                    std::cout << "Nieprawid³owy wybór klasy." << std::endl;
-                }
-            }
-            else {
-                std::cout << "Uczeñ o podanym u¿ytkowniku nie istnieje." << std::endl;
-            }
-            delete res;
+        pstmt = con->prepareStatement("INSERT INTO Klasy_Uczniowie (id_ucznia, id_klasy) VALUES (?, ?)");
+        pstmt->setInt(1, studentId);
+        pstmt->setInt(2, classId);
+        int affectedRows = pstmt->executeUpdate();
+
+        if (affectedRows > 0) {
+            std::cout << "Uczeñ zosta³ przypisany do klasy pomyœlnie." << std::endl;
         }
         else {
-            std::cout << "Nieprawid³owy wybór ucznia." << std::endl;
+            std::cout << "Nie uda³o siê przypisaæ ucznia do klasy." << std::endl;
         }
 
         if (pstmt != nullptr) {

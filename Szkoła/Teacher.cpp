@@ -19,7 +19,7 @@ bool Teacher::login() {
         sql::ResultSet* res = pstmt->executeQuery();
 
         if (res->next()) {
-            teacherId = res->getInt("id");
+            teacherId = res->getInt("id");  // Przypisanie id nauczyciela
             std::cout << "Pomyœlnie zalogowano jako nauczyciel." << std::endl;
             delete pstmt;
             delete res;
@@ -40,45 +40,52 @@ bool Teacher::login() {
         std::cout << "B³¹d SQL: " << e.what() << std::endl;
         return false;
     }
-
-    clearConsole();
 }
-
 void Teacher::addGrade() {
     clearConsole();
 
     try {
         sql::PreparedStatement* pstmt = nullptr;
-        pstmt = con->prepareStatement("SELECT p.id, p.nazwa FROM Przedmioty p JOIN Nauczyciele_Przedmioty np ON p.id = np.id_przedmiotu WHERE np.id_nauczyciela = ?");
+        pstmt = con->prepareStatement(
+            "SELECT p.id, p.nazwa "
+            "FROM Przedmioty p "
+            "JOIN Nauczyciele_Przedmioty np ON p.id = np.id_przedmiotu "
+            "WHERE np.id_nauczyciela = ?");
         pstmt->setInt(1, teacherId);
         sql::ResultSet* res = pstmt->executeQuery();
 
         std::map<int, std::string> subjects;
+        std::map<int, int> subjectChoices;  // Mapa do przechowywania sekwencyjnego numerowania
+
+        int counter = 1;
         while (res->next()) {
             int subjectId = res->getInt("id");
             std::string subjectName = res->getString("nazwa");
             subjects[subjectId] = subjectName;
+            subjectChoices[counter] = subjectId;  // Mapa wyboru
+            counter++;
         }
 
         if (subjects.empty()) {
             std::cout << "Nie jesteœ przypisany do ¿adnego przedmiotu." << std::endl;
             delete pstmt;
             delete res;
+            pressEnterToContinue();
+            clearConsole();
             return;
         }
 
         std::cout << "Wybierz przedmiot:" << std::endl;
-        for (const auto& pair : subjects) {
-            std::cout << pair.first << ". " << pair.second << std::endl;
+        for (const auto& pair : subjectChoices) {
+            std::cout << pair.first << ". " << subjects[pair.second] << std::endl;
         }
 
         int subjectChoice;
         std::cout << "Twój wybór: ";
         std::cin >> subjectChoice;
 
-        if (subjects.find(subjectChoice) != subjects.end()) {
-            int subjectId = subjectChoice;
-            std::string subjectName = subjects[subjectChoice];
+        if (subjectChoices.find(subjectChoice) != subjectChoices.end()) {
+            int subjectId = subjectChoices[subjectChoice];
 
             std::string studentUsername, gradeDate, gradeDescription;
             double grade;
@@ -101,6 +108,8 @@ void Teacher::addGrade() {
             if (students.empty()) {
                 std::cout << "Brak dostêpnych uczniów." << std::endl;
                 delete pstmt;
+                pressEnterToContinue();
+                clearConsole();
                 return;
             }
 
